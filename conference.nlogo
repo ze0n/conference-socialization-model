@@ -1,6 +1,6 @@
-;; 
-;;
-
+;;----------------------------------------------------------------------------
+;; Fields in agents
+;;----------------------------------------------------------------------------
 turtles-own 
 [ 
   thirsty?          ;; am i thirsty?
@@ -17,6 +17,14 @@ turtles-own
   obstacle-forcey
   territorial-forcex;; force exerted by neighbors
   territorial-forcey
+  wish
+  current-talk
+  walking-point
+]
+
+links-own
+[
+  new-met?
 ]
 
 globals
@@ -25,12 +33,58 @@ globals
   total-counts      ;; a list containing 10 accumulators for total times agents with the nth decile of pushiness was served
 ]
 
+;; Choose random point in area
+to choose-walking-direction
+  let point one-of patches with [pcolor = black]
+  set walking-point point 
+;;  ask point
+;;  [
+;;    set pcolor gray
+;;  ]
+end
+
+to model-behavior-change
+  let t random-float 1 
+  if t < 0.4
+  [
+    set wish "walk"
+    choose-walking-direction
+  ]
+  if t > 0.4 ;; and t < 0.6
+  [
+    set wish "go-table"
+    calc-direction-to-table
+  ]
+  color-turtle
+
+;;  if t < 0.3
+;;  [
+;;    set wish "walk"
+;;    choose-walking-direction
+;;  ]
+end
+
 ;;----------------------------------------------------------------------------
 ;; Set up the view
 ;;----------------------------------------------------------------------------
 to setup
-  ca
-  set-default-shape turtles "circle"
+  clear-all
+;;  set-default-shape turtles "circle"
+
+
+  
+  ;; set boundary patches as walls with blue color
+  ask patches with [pxcor = min-pxcor or pxcor = max-pxcor or pycor = min-pycor or pycor = max-pycor]
+  [ set pcolor blue ]
+
+  ;; columns
+  ask patches with [pycor > 8 and pycor < 12 and pxcor > 8 and pxcor < 12]
+  [ set pcolor blue ]
+
+  ;; create table
+  ask patches with [pycor < (max-pycor - 4) and pycor > (max-pycor - 8) and pxcor > 3 and pxcor < 10]
+  [ set pcolor green ]
+
 
   ;; initialize the globals
   set total-times (list 0 0 0 0 0 0 0 0 0 0)
@@ -39,7 +93,9 @@ to setup
   ;; create patrons
   create-turtles patrons
   [
-    setxy 0 (min-pycor + 3)
+    let point one-of patches with [pcolor = black]
+    setxy ([pxcor] of point) ([pycor] of point)
+    
     set thirsty? false
     ;; give the turtles an initial nudge towards the goal
     let init-direction -90 + random 180 
@@ -48,27 +104,13 @@ to setup
     set drinks-had 0
     set base-pushiness (random-float 1) * (upper-pushiness - lower-pushiness) + lower-pushiness
     set pushiness base-pushiness
+
+    ;; go directly to the table
+    set wish "walk"
+    choose-walking-direction
+    
     color-turtle
   ]
-  
-  ;; set boundary patches as walls with blue color
-  ask patches with [pxcor = min-pxcor or pxcor = max-pxcor or pycor = min-pycor or pycor = max-pycor]
-  [ set pcolor blue ]
-  
-  ;; create the enterance counter with blue color
-  ask patches with [pycor = (min-pycor + 2) and abs pxcor < 3]
-  [ set pcolor blue ]
-  
-  ask patches with [pycor = (min-pycor + 1) and abs pxcor = 2]
-  [ set pcolor blue ]
-  
-  ;; create the entrance
-  ask patches with [pycor = (min-pycor + 1) and abs pxcor < 2]
-  [ set pcolor yellow ]
-
-  ;; create goal
-  ask patches with [pycor = (max-pycor - 2) and pxcor = (10)]
-  [ set pcolor green ]
 
   reset-ticks
   
@@ -78,29 +120,80 @@ end
 ;; run the simulation
 ;;----------------------------------------------------------------------------
 to go
-  ;; run the social forces model on thirsty turtles
+  
+  ask links [set new-met? false]
+  
+  ask turtles
+  [
+    create-links-with other turtles with [distance myself < 2]
+    [
+      set new-met? true
+      set thickness 0.1
+    ]
+  ]
+  
+  ;; walking
+  ask turtles with [wish = "walk"]
+  [
+    set desired-direction towards walking-point
+    if distance walking-point < 3
+    [ model-behavior-change ]
+  ]
+
+  ;; table
+  ask turtles with [wish = "go-table"]
+  [
+    calc-direction-to-table
+  ]
+  
+  ;; go to talk
+  ask turtles with [wish = "go-talk"]
+  [    
+    calc-direction-to-table
+  ]
+  
+  ;; talk
+  ask turtles with [wish = "talk"]
+  [
+    
+  ]
+
+  ;; run the social forces model on turtles
   ;; calculate the forces first...
-  ask turtles with [ thirsty? = true ]
+  ask turtles with [wish != "talk"]
   [ 
-    calc-desired-direction 
     calc-driving-force
     calc-obstacle-force
     if any? other turtles
       [ calc-territorial-forces ] 
-  ]
-  ;; then move the turtles and have them grow impatient if need be
-  ask turtles with [ thirsty? = true ]
-  [
     move-turtle
-    if get-impatient?
-      [ grow-impatient ]
-    ;; color the turtle to show how pushy it is
-    color-turtle
   ]
+  
+  
+  ;; run the social forces model on thirsty turtles
+  ;; calculate the forces first...
+;;  ask turtles with [ thirsty? = true ]
+;;  [ 
+;;    calc-driving-force
+;;    calc-obstacle-force
+;;    if any? other turtles
+;;      [ calc-territorial-forces ] 
+;;  ]
+  
+  ;; then move the turtles and have them grow impatient if need be
+;;  ask turtles with [ thirsty? = true ]
+;;  [
+;;    move-turtle
+;;    if get-impatient?
+;;      [ grow-impatient ]
+;;    ;; color the turtle to show how pushy it is
+;;    color-turtle
+;;  ]
   
   ;; control the arrival of new thirsty turtles
   if any? turtles with [thirsty? = false]
   [ wait-around ]
+  
   ;; control the service rate of bartenders. follow an exponential distribution for service times
   let p 1 / mean-service-time
   if random-float 1 < p
@@ -108,6 +201,7 @@ to go
     ask one-of patches with [pcolor = green]
     [ service-patron ]
   ]
+  
   tick
 end
 
@@ -127,7 +221,7 @@ end
 ;; "serve" a turtle a drink
 ;;----------------------------------------------------------------------------
 to service-patron 
-  if any? turtles in-radius 2.5
+  if any? (turtles with [wish = "go-table"]) in-radius 2.5
   [
     ;; default to "random" service-plan
     let next-served one-of turtles in-radius 2.5
@@ -136,7 +230,11 @@ to service-patron
     ask next-served
     [
       ;; reset the turtle
-      setxy 0 0
+      ;;       setxy 0 0
+    
+      set wish "walk"
+      choose-walking-direction
+    
       set thirsty? false
       let init-direction -90 + random 180
       set vx sin init-direction
@@ -158,16 +256,29 @@ end
 ;; get more pushy over time
 ;;----------------------------------------------------------------------------
 to grow-impatient
-  set pushiness pushiness + impatience-rate
-  ;; make sure i'm not too pushy
-  set pushiness min list pushiness upper-pushiness
+ set pushiness pushiness + impatience-rate
+ ;; make sure i'm not too pushy
+ set pushiness min list pushiness upper-pushiness
 end
 
 ;;----------------------------------------------------------------------------
 ;; color a turtle according to its pushiness
 ;;----------------------------------------------------------------------------
 to color-turtle
-  set color 19 - ((pushiness - lower-pushiness) / (upper-pushiness - lower-pushiness)) * 4
+;;  set color 19 - ((pushiness - lower-pushiness) / (upper-pushiness - lower-pushiness)) * 4
+;;  set color 19 - ((pushiness - lower-pushiness) / (upper-pushiness - lower-pushiness)) * 4
+
+  ifelse (wish = "go-table")
+  [ set color magenta ]
+  [
+    ifelse (wish = "walk")
+    [ set color red ]
+    [  
+      ifelse (wish = "go-talk")
+      [ set color yellow ]
+      [ set color turquoise ]
+    ]
+  ]
 end
 
 ;;----------------------------------------------------------------------------
@@ -262,7 +373,7 @@ end
 to calc-obstacle-force
   set obstacle-forcex 0
   set obstacle-forcey 0
-  ask patches with [pcolor = white]
+  ask patches with [(pcolor = blue or pcolor = green) and distance myself < 10]
   [
     let to-obstacle (towards myself) - 180
     let obstacle-force (- u0) * exp (- (distance myself) / r)
@@ -285,7 +396,7 @@ end
 ;;----------------------------------------------------------------------------
 ;; find the heading towards the nearest goal
 ;;----------------------------------------------------------------------------
-to calc-desired-direction
+to calc-direction-to-table
   let goal min-one-of (patches with [pcolor = green]) [ distance myself ]
   set desired-direction towards goal
 end
@@ -1020,7 +1131,7 @@ Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 
 @#$#@#$#@
-NetLogo 5.1.0
+NetLogo 5.0.2
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@

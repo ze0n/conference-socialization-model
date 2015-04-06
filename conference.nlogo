@@ -1,5 +1,5 @@
 ;;----------------------------------------------------------------------------
-;; Fields in agents
+;; Свойства агента
 ;;----------------------------------------------------------------------------
 turtles-own 
 [ 
@@ -22,6 +22,9 @@ turtles-own
   walking-point
 ]
 
+;;----------------------------------------------------------------------------
+;; Свойства связи между агентами
+;;----------------------------------------------------------------------------
 links-own
 [
   new-met?
@@ -33,7 +36,10 @@ globals
   total-counts      ;; a list containing 10 accumulators for total times agents with the nth decile of pushiness was served
 ]
 
-;; Choose random point in area
+
+;;----------------------------------------------------------------------------
+;; Выбираем случайную цель движения из нераскрашенных
+;;----------------------------------------------------------------------------
 to choose-walking-direction
   let point one-of patches with [pcolor = black]
   set walking-point point 
@@ -43,6 +49,9 @@ to choose-walking-direction
 ;;  ]
 end
 
+;;----------------------------------------------------------------------------
+;; Случайный выбор поведения: walk, table, talk
+;;----------------------------------------------------------------------------
 to model-behavior-change
   let t random-float 1 
   if t < 0.4
@@ -50,7 +59,7 @@ to model-behavior-change
     set wish "walk"
     choose-walking-direction
   ]
-  if t > 0.4 ;; and t < 0.6
+  if t >= 0.4 ;; and t < 0.6
   [
     set wish "go-table"
     calc-direction-to-table
@@ -69,34 +78,32 @@ end
 ;;----------------------------------------------------------------------------
 to setup
   clear-all
-;;  set-default-shape turtles "circle"
 
-
+  ;; Выбор пиктограммы для агента: circle, default
+  set-default-shape turtles "default"
   
-  ;; set boundary patches as walls with blue color
+  ;; == Инициализируем карту ==
+  
+  ;; Синим обозначаем стены
   ask patches with [pxcor = min-pxcor or pxcor = max-pxcor or pycor = min-pycor or pycor = max-pycor]
   [ set pcolor blue ]
 
-  ;; columns
+  ;; Препятствия так же обозначаем синим
   ask patches with [pycor > 8 and pycor < 12 and pxcor > 8 and pxcor < 12]
   [ set pcolor blue ]
 
-  ;; create table
+  ;; Стол для харчевания устанавливаем в зеленый цвет
   ask patches with [pycor < (max-pycor - 4) and pycor > (max-pycor - 8) and pxcor > 3 and pxcor < 10]
   [ set pcolor green ]
 
-
-  ;; initialize the globals
-  set total-times (list 0 0 0 0 0 0 0 0 0 0)
-  set total-counts (list 0 0 0 0 0 0 0 0 0 0)
-
-  ;; create patrons
+  ;; == Создаем агентов ==
   create-turtles patrons
   [
     let point one-of patches with [pcolor = black]
     setxy ([pxcor] of point) ([pycor] of point)
     
     set thirsty? false
+
     ;; give the turtles an initial nudge towards the goal
     let init-direction -90 + random 180 
     set vx sin init-direction
@@ -105,19 +112,21 @@ to setup
     set base-pushiness (random-float 1) * (upper-pushiness - lower-pushiness) + lower-pushiness
     set pushiness base-pushiness
 
-    ;; go directly to the table
+    ;; Пусть изначально все разбегутся
     set wish "walk"
     choose-walking-direction
     
+    ;; Раскрашиваем агента
     color-turtle
   ]
 
+  ;; Сбрасываем счетчик времени
   reset-ticks
   
 end
 
 ;;----------------------------------------------------------------------------
-;; run the simulation
+;; Основная функция для итерации моделирования
 ;;----------------------------------------------------------------------------
 to go
   
@@ -136,6 +145,11 @@ to go
   ask turtles with [wish = "walk"]
   [
     set desired-direction towards walking-point
+
+    ;; Поворачиваем пиктограмму в сторону цели
+    face walking-point
+    
+    ;; Если достигли цели - меняем поведение
     if distance walking-point < 3
     [ model-behavior-change ]
   ]
@@ -191,8 +205,8 @@ to go
 ;;  ]
   
   ;; control the arrival of new thirsty turtles
-  if any? turtles with [thirsty? = false]
-  [ wait-around ]
+;;  if any? turtles with [thirsty? = false]
+;;  [ wait-around ]
   
   ;; control the service rate of bartenders. follow an exponential distribution for service times
   let p 1 / mean-service-time
@@ -284,17 +298,17 @@ end
 ;;----------------------------------------------------------------------------
 ;; control when newly thirsty turtles arrive. follow an exponential distribution of inter-arrival times
 ;;----------------------------------------------------------------------------
-to wait-around
-  let p 1 / mean-time-between-arrivals
-  if random-float 1 < p 
-  [
-    ask one-of turtles with [thirsty? = false] 
-    [ 
-      set thirsty? true
-      set start-of-thirst ticks 
-    ]
-  ]
-end   
+;;to wait-around
+;;  let p 1 / mean-time-between-arrivals
+;;  if random-float 1 < p 
+;;  [
+;;    ask one-of turtles with [thirsty? = false] 
+;;    [ 
+;;      set thirsty? true
+;;      set start-of-thirst ticks 
+;;    ]
+;;  ]
+;;end   
 
 ;;----------------------------------------------------------------------------
 ;; helper function to find the magnitude of a vector
@@ -398,14 +412,15 @@ end
 ;;----------------------------------------------------------------------------
 to calc-direction-to-table
   let goal min-one-of (patches with [pcolor = green]) [ distance myself ]
+  face goal
   set desired-direction towards goal
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-404
-10
-1077
-704
+486
+15
+1159
+709
 25
 25
 13.0
@@ -429,10 +444,10 @@ ticks
 30.0
 
 BUTTON
-9
-114
-72
-147
+11
+19
+88
+53
 NIL
 setup
 NIL
@@ -446,10 +461,10 @@ NIL
 1
 
 BUTTON
-114
-114
-177
-147
+116
+19
+179
+52
 NIL
 go
 T
@@ -463,10 +478,10 @@ NIL
 1
 
 PLOT
-196
-272
-396
-422
+227
+432
+427
+582
 Average Wait Time Distribution
 pushiness (in deciles)
 average wait
@@ -481,25 +496,25 @@ PENS
 "default" 1.0 1 -16777216 true "" "clear-plot\nforeach [0 1 2 3 4 5 6 7 8 9]\n[\n  ifelse item ? total-counts = 0\n  [ plotxy ? 0]\n  [ plotxy ? (item ? total-times) / (item ? total-counts) ]\n]"
 
 SLIDER
-7
 10
-179
-43
+76
+182
+109
 patrons
 patrons
 1
 200
-132
+123
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-6
-45
-178
-78
+249
+665
+421
+698
 lower-pushiness
 lower-pushiness
 0
@@ -511,10 +526,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-8
-80
-180
-113
+251
+700
+423
+733
 upper-pushiness
 upper-pushiness
 lower-pushiness
@@ -523,21 +538,6 @@ lower-pushiness
 .1
 1
 NIL
-HORIZONTAL
-
-SLIDER
-0
-149
-191
-182
-mean-time-between-arrivals
-mean-time-between-arrivals
-1
-100
-3
-1
-1
-ticks
 HORIZONTAL
 
 SLIDER
@@ -571,25 +571,25 @@ NIL
 HORIZONTAL
 
 SLIDER
-188
-28
-360
-61
+1241
+38
+1413
+71
 v0
 v0
 0
 10
-2.1
+2
 0.1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-189
-71
-361
-104
+1241
+78
+1413
+111
 sigma
 sigma
 0.1
@@ -601,20 +601,20 @@ NIL
 HORIZONTAL
 
 TEXTBOX
-193
-10
-343
-28
+1243
+13
+1393
+31
 Force Constants
-11
+14
 0.0
 1
 
 SLIDER
-191
-115
-363
-148
+1241
+119
+1413
+152
 u0
 u0
 0
@@ -626,10 +626,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-193
-157
-365
-190
+1241
+161
+1413
+194
 r
 r
 0.1
@@ -641,10 +641,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-196
-201
-368
-234
+1241
+204
+1413
+237
 tau
 tau
 1
@@ -738,20 +738,20 @@ ticks
 HORIZONTAL
 
 CHOOSER
-8
-469
-146
-514
+21
+666
+159
+711
 service-plan
 service-plan
 "random" "waited-longest"
-1
+0
 
 PLOT
-197
+226
+270
 426
-397
-576
+420
 average wait time
 ticks
 average wait time
@@ -1131,7 +1131,7 @@ Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 
 @#$#@#$#@
-NetLogo 5.0.2
+NetLogo 5.1.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@

@@ -3,10 +3,10 @@
 ;;----------------------------------------------------------------------------
 turtles-own 
 [ 
-  thirsty?          ;; am i thirsty?
-  start-of-thirst   ;; when did i start getting thirsty?
+  ;; Жажда
   drinks-had        ;; the number of drinks i've had
-  base-pushiness    ;; the pushiness i am born with
+
+  ;; Движение
   pushiness         ;; how pushy i am at the moment
   vx                ;; x velocity
   vy                ;; y velocity
@@ -17,25 +17,20 @@ turtles-own
   obstacle-forcey
   territorial-forcex;; force exerted by neighbors
   territorial-forcey
+
+  ;; Поведение
   wish
   current-talk
   walking-point
 ]
 
 ;;----------------------------------------------------------------------------
-;; Свойства связи между агентами
+;; Связи между агентами
 ;;----------------------------------------------------------------------------
-links-own
-[
-  new-met?
-]
-
-globals
-[
-  total-times       ;; a list containing 10 accumulators for total time spent waiting by agents with the nth decile pushiness value
-  total-counts      ;; a list containing 10 accumulators for total times agents with the nth decile of pushiness was served
-]
-
+;links-own
+;[
+;  new-met?
+;]
 
 ;;----------------------------------------------------------------------------
 ;; Выбираем случайную цель движения из нераскрашенных
@@ -43,10 +38,6 @@ globals
 to choose-walking-direction
   let point one-of patches with [pcolor = black]
   set walking-point point 
-;;  ask point
-;;  [
-;;    set pcolor gray
-;;  ]
 end
 
 ;;----------------------------------------------------------------------------
@@ -102,15 +93,12 @@ to setup
     let point one-of patches with [pcolor = black]
     setxy ([pxcor] of point) ([pycor] of point)
     
-    set thirsty? false
-
     ;; give the turtles an initial nudge towards the goal
     let init-direction -90 + random 180 
     set vx sin init-direction
     set vy cos init-direction
     set drinks-had 0
-    set base-pushiness (random-float 1) * (upper-pushiness - lower-pushiness) + lower-pushiness
-    set pushiness base-pushiness
+    set pushiness 1.5
 
     ;; Пусть изначально все разбегутся
     set wish "walk"
@@ -130,16 +118,16 @@ end
 ;;----------------------------------------------------------------------------
 to go
   
-  ask links [set new-met? false]
+;  ask links [set new-met? false]
   
-  ask turtles
-  [
-    create-links-with other turtles with [distance myself < 2]
-    [
-      set new-met? true
-      set thickness 0.1
-    ]
-  ]
+;  ask turtles
+;  [
+;    create-links-with other turtles with [distance myself < 2]
+;    [
+;      set new-met? true
+;      set thickness 0.1
+;    ]
+;  ]
   
   ;; walking
   ask turtles with [wish = "walk"]
@@ -183,31 +171,6 @@ to go
     move-turtle
   ]
   
-  
-  ;; run the social forces model on thirsty turtles
-  ;; calculate the forces first...
-;;  ask turtles with [ thirsty? = true ]
-;;  [ 
-;;    calc-driving-force
-;;    calc-obstacle-force
-;;    if any? other turtles
-;;      [ calc-territorial-forces ] 
-;;  ]
-  
-  ;; then move the turtles and have them grow impatient if need be
-;;  ask turtles with [ thirsty? = true ]
-;;  [
-;;    move-turtle
-;;    if get-impatient?
-;;      [ grow-impatient ]
-;;    ;; color the turtle to show how pushy it is
-;;    color-turtle
-;;  ]
-  
-  ;; control the arrival of new thirsty turtles
-;;  if any? turtles with [thirsty? = false]
-;;  [ wait-around ]
-  
   ;; control the service rate of bartenders. follow an exponential distribution for service times
   let p 1 / mean-service-time
   if random-float 1 < p
@@ -222,66 +185,33 @@ end
 ;;;; Function for waiting around and other functions ;;;;
 
 ;;----------------------------------------------------------------------------
-;; returns a value from 0-9 which is the decile of pushiness that an agent has
-;;----------------------------------------------------------------------------
-to-report pushiness-index [pushiness-value]
-  let p-index floor (((pushiness-value - lower-pushiness) / (upper-pushiness - lower-pushiness)) * 10)
-  ifelse p-index = 10 ;; if it's 10, just treat it as 9
-  [ report 9 ]
-  [ report p-index ]
-end
-
-;;----------------------------------------------------------------------------
 ;; "serve" a turtle a drink
 ;;----------------------------------------------------------------------------
 to service-patron 
   if any? (turtles with [wish = "go-table"]) in-radius 2.5
   [
-    ;; default to "random" service-plan
-    let next-served one-of turtles in-radius 2.5
-    if service-plan = "waited-longest"
-    [ set next-served max-one-of turtles in-radius 2.5 [  ticks - start-of-thirst ] ]
+    ;; take random agent
+    let next-served one-of turtles with [wish = "go-table"] in-radius 2.5
     ask next-served
     [
-      ;; reset the turtle
-      ;;       setxy 0 0
-    
       set wish "walk"
       choose-walking-direction
-    
-      set thirsty? false
+      
       let init-direction -90 + random 180
       set vx sin init-direction
       set vy cos init-direction
       set drinks-had drinks-had + 1
-      set pushiness base-pushiness
-      let p-index pushiness-index pushiness
-      ;; increment the corresponding elements in the global arrays to keep track of wait times and service counts
-      set total-counts replace-item p-index total-counts ((item p-index total-counts) + 1)
-      set total-times replace-item p-index total-times ((item p-index total-times) + (ticks - start-of-thirst))
-      if get-belligerent?
-      [ set pushiness min (list upper-pushiness (base-pushiness + belligerence-rate * drinks-had)) ]
+      set pushiness 1.5
+      
       color-turtle
     ]
   ]
 end
 
 ;;----------------------------------------------------------------------------
-;; get more pushy over time
-;;----------------------------------------------------------------------------
-to grow-impatient
- set pushiness pushiness + impatience-rate
- ;; make sure i'm not too pushy
- set pushiness min list pushiness upper-pushiness
-end
-
-;;----------------------------------------------------------------------------
 ;; color a turtle according to its pushiness
 ;;----------------------------------------------------------------------------
 to color-turtle
-;;  set color 19 - ((pushiness - lower-pushiness) / (upper-pushiness - lower-pushiness)) * 4
-;;  set color 19 - ((pushiness - lower-pushiness) / (upper-pushiness - lower-pushiness)) * 4
-
   ifelse (wish = "go-table")
   [ set color magenta ]
   [
@@ -294,21 +224,6 @@ to color-turtle
     ]
   ]
 end
-
-;;----------------------------------------------------------------------------
-;; control when newly thirsty turtles arrive. follow an exponential distribution of inter-arrival times
-;;----------------------------------------------------------------------------
-;;to wait-around
-;;  let p 1 / mean-time-between-arrivals
-;;  if random-float 1 < p 
-;;  [
-;;    ask one-of turtles with [thirsty? = false] 
-;;    [ 
-;;      set thirsty? true
-;;      set start-of-thirst ticks 
-;;    ]
-;;  ]
-;;end   
 
 ;;----------------------------------------------------------------------------
 ;; helper function to find the magnitude of a vector
@@ -326,8 +241,14 @@ to-report field-of-view-modifier [desiredx desiredy forcex forcey]
   [ report c]
 end
 
+
+;;============================================================================
+;; Движение
+;; Movement
+;;============================================================================
+
 ;;----------------------------------------------------------------------------
-;;;; Functions for calculating the social forces ;;;;
+;; Social Force Model
 ;; move the turtle according to the rules of the social forces model
 ;;----------------------------------------------------------------------------
 to move-turtle
@@ -351,6 +272,7 @@ to move-turtle
 end
 
 ;;-----------------------------------------------------------------
+;; Social Force Model
 ;; find the territorial force according to the social forces model
 ;;-----------------------------------------------------------------
 to calc-territorial-forces
@@ -382,6 +304,7 @@ to calc-territorial-forces
 end
 
 ;;----------------------------------------------------------------------------
+;; Social Force Model
 ;; find the obstacle force of the turtle according to the social forces model
 ;;----------------------------------------------------------------------------
 to calc-obstacle-force
@@ -477,24 +400,6 @@ NIL
 NIL
 1
 
-PLOT
-227
-432
-427
-582
-Average Wait Time Distribution
-pushiness (in deciles)
-average wait
-0.0
-9.0
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"default" 1.0 1 -16777216 true "" "clear-plot\nforeach [0 1 2 3 4 5 6 7 8 9]\n[\n  ifelse item ? total-counts = 0\n  [ plotxy ? 0]\n  [ plotxy ? (item ? total-times) / (item ? total-counts) ]\n]"
-
 SLIDER
 10
 76
@@ -520,21 +425,6 @@ lower-pushiness
 0
 10
 1.5
-.1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-251
-700
-423
-733
-upper-pushiness
-upper-pushiness
-lower-pushiness
-10
-1.6
 .1
 1
 NIL
@@ -737,24 +627,14 @@ mean-service-time
 ticks
 HORIZONTAL
 
-CHOOSER
-21
-666
-159
-711
-service-plan
-service-plan
-"random" "waited-longest"
-0
-
 PLOT
-226
-270
-426
-420
-average wait time
-ticks
-average wait time
+242
+17
+442
+167
+drinkshaddistribution
+drinks had
+distribution
 0.0
 10.0
 0.0
@@ -763,7 +643,7 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "ifelse sum total-counts = 0\n[plot 0]\n[plot (sum total-times) / (sum total-counts)]"
+"default" 1.0 1 -16777216 true "" "histogram [drinks-had] of turtles"
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1131,7 +1011,7 @@ Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 
 @#$#@#$#@
-NetLogo 5.1.0
+NetLogo 5.0.2
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@

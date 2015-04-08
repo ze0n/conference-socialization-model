@@ -3,6 +3,9 @@
 ;;----------------------------------------------------------------------------
 turtles-own 
 [
+  ;; INFECTION
+  infected
+
   ;; Жажда
   drinks-had        ;; the number of drinks i've had
   talks-given
@@ -34,14 +37,6 @@ patches-own
 [
   density
 ]
-
-;;----------------------------------------------------------------------------
-;; Связи между агентами
-;;----------------------------------------------------------------------------
-;links-own
-;[
-;  new-met?
-;]
 
 ;;----------------------------------------------------------------------------
 ;; Инициализация модели
@@ -89,6 +84,15 @@ to setup
     
     ;; Раскрашиваем агента
     color-turtle
+    
+    ;; INFECTION
+    set infected false
+    
+    
+    let init-direction -90 + random 180 
+    set vx sin init-direction
+    set vy cos init-direction
+    
   ]
 
   ;; Сбрасываем счетчик времени
@@ -127,9 +131,9 @@ to go
   ;; Направление движение на основе режима
   ;;-----------------
 
-  let radius 5
-  let enoughListeners 3
-  let timeToTalk 100
+  let radius 4
+  let enoughListeners 4
+  let timeToTalk 200
   
   ;;   w t l e
   ;; w + + + +
@@ -159,16 +163,18 @@ to go
   ask turtles with [wish = "wanna-listen" and action = "walk"]
   [
     let goal max-one-of (turtles with [ action = "talk" ]) [ count my-out-links / distance myself]
-    face goal
-    
-    ifelse distance goal < 5
+    if goal != NOBODY
     [
+      face goal
+      ifelse distance goal <= radius
+      [
         set action "listen"
         set time-left-in-talk timeToTalk
         create-link-from goal
-    ]
-    [
-      set desired-direction towards goal
+      ]
+      [
+        set desired-direction towards goal
+      ]
     ]
   ]
   
@@ -178,18 +184,21 @@ to go
     ;; Достаточно человек рядом -> начинаю говорить
     ifelse count turtles in-radius radius >= enoughListeners
     [ 
-      ;; start talking
-      set action "talk"
-      set time-left-in-talk timeToTalk
-      
-      let listeners turtles in-radius radius with [wish = "wanna-listen"]
-      ask listeners
+      if any? turtles in-radius radius with [wish = "wanna-listen" and action = "walk"]
       [
-        set action "listen"
+        ;; start talking
+        set action "talk"
         set time-left-in-talk timeToTalk
+        
+        let listeners turtles in-radius radius with [wish = "wanna-listen" and action = "walk"]
+        ask listeners
+        [
+          set action "listen"
+          set time-left-in-talk timeToTalk
+        ]
+        
+        create-links-to listeners
       ]
-
-      create-links-to listeners
     ]
     ;; Недостаточно человек рядом -> ищу
     [
@@ -205,23 +214,26 @@ to go
     ifelse time-left-in-talk = 0
     [
       ;; заканчиваем разговор
-      let listeners [end2] of my-out-links
-      ask listeners
+      ask out-link-neighbors
       [
         model-behavior-change
       ]
-      
+
       ask my-out-links [die]
       
       model-behavior-change
     ]
     [
+      ;; INFECTION
+      set infected infected or reduce or [infected] of out-link-neighbors
+      if infected [ ask out-link-neighbors [set infected true] ]
+      
       set time-left-in-talk time-left-in-talk - 1
     ]
   ]
   
   ;; Хочу слушать и слушаю
-  ask turtles with [wish = "wanna-talk" and action = "talk"]
+  ask turtles with [wish = "wanna-listen" and action = "listen"]
   [
     ifelse time-left-in-talk = 0
     [
@@ -236,7 +248,7 @@ to go
   
   ;; run the social forces model on turtles
   ;; calculate the forces first...
-  ask turtles with [action != "walk"]
+  ask turtles with [action = "walk"]
   [ 
     calc-driving-force
     calc-obstacle-force
@@ -264,7 +276,7 @@ end
 ;; Выбираем случайную цель движения из нераскрашенных
 ;;----------------------------------------------------------------------------
 to choose-walking-direction
-  let point one-of patches with [pcolor = black]
+  let point one-of patches with [pcolor = black and distance myself > 2]
   set walking-point point 
 end
 
@@ -275,23 +287,27 @@ to model-behavior-change
   set action "walk"
   
   let t random-float 1 
-  if t < 0.25
+  if t < 0.20
   [
     set wish "wanna-walk"
     choose-walking-direction
+    let init-direction -90 + random 180
+    set vx sin init-direction
+    set vy cos init-direction
+
   ]
 
-  if t >= 0.25 and t < 0.5
+  if t >= 0.20 and t < 0.4
   [
     set wish "wanna-eat"
   ]
   
-  if t >= 0.5 and t < 0.75
+  if t >= 0.4 and t < 0.8
   [
     set wish "wanna-listen"
   ]
   
-  if t >= 0.75 and t <= 1.0
+  if t >= 0.8 and t <= 1.0
   [
     set wish "wanna-talk"
   ]
@@ -303,13 +319,13 @@ end
 ;; Обслуживание за столом
 ;;----------------------------------------------------------------------------
 to service-patron 
-  if any? (turtles with [wish = "go-table"]) in-radius 2.5
+  if any? (turtles with [wish = "wanna-eat"]) in-radius 2.5
   [
     ;; take random agent
-    let next-served one-of turtles with [wish = "go-table"] in-radius 2.5
+    let next-served one-of turtles with [wish = "wanna-eat"] in-radius 2.5
     ask next-served
     [
-      set wish "walk"
+      set wish "wanna-walk"
       choose-walking-direction
       set drinks-had drinks-had + 1
       color-turtle
@@ -321,19 +337,25 @@ end
 ;; Раскрашивание агента
 ;;----------------------------------------------------------------------------
 to color-turtle
+; pressure
 ;  set color (scale-color white (count other turtles in-radius 2) 0 5)
   
-  ifelse (wish = "go-table")
-  [ set color magenta ]
-  [
-    ifelse (wish = "walk")
-    [ set color red ]
-    [  
-      ifelse (wish = "go-talk")
-      [ set color yellow ]
-      [ set color turquoise ]
-    ]
-  ]
+; INFECTION
+  ifelse (infected = true)
+  [ set color red ]
+  [ set color green ]
+  
+;  ifelse (wish = "wanna-eat")
+;  [ set color magenta ]
+;  [
+;    ifelse (wish = "wanna-walk")
+;    [ set color red ]
+;    [  
+;      ifelse (wish = "wanna-talk")
+;      [ set color yellow ]
+;      [ set color turquoise ]
+;    ]
+;  ]
 end
 
 ;;============================================================================
@@ -525,7 +547,7 @@ field-of-view
 field-of-view
 0
 360
-9
+202
 1
 1
 NIL
@@ -555,7 +577,7 @@ v0
 v0
 0
 10
-2.7
+2.1
 0.1
 1
 NIL
@@ -705,8 +727,10 @@ true
 false
 "" ""
 PENS
-"Walkers" 1.0 0 -5298144 true "" "plot count turtles with [wish = \"walk\"]"
-"Table" 1.0 0 -7858858 true "" "plot count turtles with [wish = \"go-table\"]"
+"Walkers" 1.0 0 -5298144 true "" "plot count turtles with [wish = \"wanna-walk\"]"
+"Table" 1.0 0 -7858858 true "" "plot count turtles with [wish = \"wanna-eat\"]"
+"pen-2" 1.0 0 -7500403 true "" "plot count turtles with [wish = \"wanna-talk\"]"
+"pen-3" 1.0 0 -2674135 true "" "plot count turtles with [wish = \"wanna-listen\"]"
 
 PLOT
 196
@@ -1118,7 +1142,7 @@ Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 
 @#$#@#$#@
-NetLogo 5.1.0
+NetLogo 5.0.2
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@

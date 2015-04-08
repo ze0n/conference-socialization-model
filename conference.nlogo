@@ -2,12 +2,13 @@
 ;; Свойства агента
 ;;----------------------------------------------------------------------------
 turtles-own 
-[ 
+[
   ;; Жажда
   drinks-had        ;; the number of drinks i've had
+  talks-given
+  talks-listened
 
   ;; Движение
-  pushiness         ;; how pushy i am at the moment
   vx                ;; x velocity
   vy                ;; y velocity
   desired-direction ;; my desired direction
@@ -19,9 +20,19 @@ turtles-own
   territorial-forcey
 
   ;; Поведение
-  wish
-  current-talk
+  wish              ;; wanna-walk, wanna-talk, wanna-listen, wanna-eat
+  action            ;; walk, talk, listen
   walking-point
+  
+  time-left-in-talk
+]
+
+;;----------------------------------------------------------------------------
+;; Карта
+;;----------------------------------------------------------------------------
+patches-own
+[
+  density
 ]
 
 ;;----------------------------------------------------------------------------
@@ -33,58 +44,32 @@ turtles-own
 ;]
 
 ;;----------------------------------------------------------------------------
-;; Выбираем случайную цель движения из нераскрашенных
-;;----------------------------------------------------------------------------
-to choose-walking-direction
-  let point one-of patches with [pcolor = black]
-  set walking-point point 
-end
-
-;;----------------------------------------------------------------------------
-;; Случайный выбор поведения: walk, table, talk
-;;----------------------------------------------------------------------------
-to model-behavior-change
-  let t random-float 1 
-  if t < 0.4
-  [
-    set wish "walk"
-    choose-walking-direction
-  ]
-  if t >= 0.4 ;; and t < 0.6
-  [
-    set wish "go-table"
-    calc-direction-to-table
-  ]
-  color-turtle
-
-;;  if t < 0.3
-;;  [
-;;    set wish "walk"
-;;    choose-walking-direction
-;;  ]
-end
-
-;;----------------------------------------------------------------------------
-;; Set up the view
+;; Инициализация модели
 ;;----------------------------------------------------------------------------
 to setup
   clear-all
 
-  ;; Выбор пиктограммы для агента: circle, default
+  ;; Выбор пиктограммы для агента: circle, default, ...
   set-default-shape turtles "default"
   
   ;; == Инициализируем карту ==
   
+  ;;-----------------
   ;; Синим обозначаем стены
+  ;;-----------------
   ask patches with [pxcor = min-pxcor or pxcor = max-pxcor or pycor = min-pycor or pycor = max-pycor]
   [ set pcolor blue ]
 
-  ;; Препятствия так же обозначаем синим
-  ask patches with [pycor > 8 and pycor < 12 and pxcor > 8 and pxcor < 12]
+  ;;-----------------
+  ;; Препятствия также обозначаем синим
+  ;;-----------------
+  ask patches with [pycor > 4 and pycor < 13 and abs pxcor > 10 and abs pxcor < 13]
   [ set pcolor blue ]
 
+  ;;-----------------
   ;; Стол для харчевания устанавливаем в зеленый цвет
-  ask patches with [pycor < (max-pycor - 4) and pycor > (max-pycor - 8) and pxcor > 3 and pxcor < 10]
+  ;;-----------------
+  ask patches with [pycor < (max-pycor - 4) and pycor > (max-pycor - 8) and abs pxcor > 3 and abs pxcor < 10]
   [ set pcolor green ]
 
   ;; == Создаем агентов ==
@@ -93,15 +78,13 @@ to setup
     let point one-of patches with [pcolor = black]
     setxy ([pxcor] of point) ([pycor] of point)
     
-    ;; give the turtles an initial nudge towards the goal
-    let init-direction -90 + random 180 
-    set vx sin init-direction
-    set vy cos init-direction
     set drinks-had 0
-    set pushiness 1.5
+    set talks-given 0
+    set talks-listened 0
 
     ;; Пусть изначально все разбегутся
-    set wish "walk"
+    set wish "wanna-walk"
+    set action "walk"
     choose-walking-direction
     
     ;; Раскрашиваем агента
@@ -118,51 +101,142 @@ end
 ;;----------------------------------------------------------------------------
 to go
   
-;  ask links [set new-met? false]
+  ;;-----------------
+  ;; Плотность
+  ;;-----------------
+  ; Расчет
+  ask patches with [member? pcolor (list blue green) = false]
+  [ 
+    set density count turtles in-radius 2.5 
+  ]
+  ; Отображение
+  ifelse show-density
+  [
+    ask patches with [member? pcolor (list blue green) = false]
+    [ 
+      set pcolor (scale-color white (count turtles in-radius 2) 0 5)
+    ]
+  ]
+  [
+    ask patches with [member? pcolor (list blue green) = false]
+    [ set pcolor black ]
+  ]
+
+
+  ;;-----------------
+  ;; Направление движение на основе режима
+  ;;-----------------
+
+  let radius 5
+  let enoughListeners 3
+  let timeToTalk 100
   
-;  ask turtles
-;  [
-;    create-links-with other turtles with [distance myself < 2]
-;    [
-;      set new-met? true
-;      set thickness 0.1
-;    ]
-;  ]
+  ;;   w t l e
+  ;; w + + + +
+  ;; t   +
+  ;; l     +
   
-  ;; walking
-  ask turtles with [wish = "walk"]
+  ;; Хочу гулять и иду
+  ask turtles with [wish = "wanna-walk" and action = "walk"]
   [
     set desired-direction towards walking-point
-
     ;; Поворачиваем пиктограмму в сторону цели
     face walking-point
-    
     ;; Если достигли цели - меняем поведение
     if distance walking-point < 3
     [ model-behavior-change ]
   ]
-
-  ;; table
-  ask turtles with [wish = "go-table"]
+  
+  ;; Хочу есть и иду к еде
+  ask turtles with [wish = "wanna-eat" and action = "walk"]
   [
-    calc-direction-to-table
+    let goal min-one-of (patches with [pcolor = green]) [ distance myself ]
+    face goal
+    set desired-direction towards goal
   ]
   
-  ;; go to talk
-  ask turtles with [wish = "go-talk"]
-  [    
-    calc-direction-to-table
-  ]
-  
-  ;; talk
-  ask turtles with [wish = "talk"]
+  ;; Хочу слушать и ищу говорящего
+  ask turtles with [wish = "wanna-listen" and action = "walk"]
   [
+    let goal max-one-of (turtles with [ action = "talk" ]) [ count my-out-links / distance myself]
+    face goal
     
+    ifelse distance goal < 5
+    [
+        set action "listen"
+        set time-left-in-talk timeToTalk
+        create-link-from goal
+    ]
+    [
+      set desired-direction towards goal
+    ]
   ]
+  
+  ;; Хочу говорить и ищу достаточно слушателей
+  ask turtles with [wish = "wanna-talk" and action = "walk"]
+  [
+    ;; Достаточно человек рядом -> начинаю говорить
+    ifelse count turtles in-radius radius >= enoughListeners
+    [ 
+      ;; start talking
+      set action "talk"
+      set time-left-in-talk timeToTalk
+      
+      let listeners turtles in-radius radius with [wish = "wanna-listen"]
+      ask listeners
+      [
+        set action "listen"
+        set time-left-in-talk timeToTalk
+      ]
 
+      create-links-to listeners
+    ]
+    ;; Недостаточно человек рядом -> ищу
+    [
+      let goal max-one-of (patches with [ pcolor = black ]) [ count turtles in-radius radius ]
+      face goal
+      set desired-direction towards goal
+    ]
+  ]
+  
+  ;; Хочу говорить и говорю
+  ask turtles with [wish = "wanna-talk" and action = "talk"]
+  [
+    ifelse time-left-in-talk = 0
+    [
+      ;; заканчиваем разговор
+      let listeners [end2] of my-out-links
+      ask listeners
+      [
+        model-behavior-change
+      ]
+      
+      ask my-out-links [die]
+      
+      model-behavior-change
+    ]
+    [
+      set time-left-in-talk time-left-in-talk - 1
+    ]
+  ]
+  
+  ;; Хочу слушать и слушаю
+  ask turtles with [wish = "wanna-talk" and action = "talk"]
+  [
+    ifelse time-left-in-talk = 0
+    [
+      ;; ухожу - надоело
+      ask my-in-links [die]
+      model-behavior-change
+    ]
+    [
+      set time-left-in-talk time-left-in-talk - 1
+    ]
+  ]
+  
   ;; run the social forces model on turtles
   ;; calculate the forces first...
-  ask turtles with [wish != "talk"]
+  ask turtles with [action != "walk"]
   [ 
     calc-driving-force
     calc-obstacle-force
@@ -182,10 +256,51 @@ to go
   tick
 end
 
-;;;; Function for waiting around and other functions ;;;;
+;;============================================================================
+;; Поведение
+;;============================================================================
 
 ;;----------------------------------------------------------------------------
-;; "serve" a turtle a drink
+;; Выбираем случайную цель движения из нераскрашенных
+;;----------------------------------------------------------------------------
+to choose-walking-direction
+  let point one-of patches with [pcolor = black]
+  set walking-point point 
+end
+
+;;----------------------------------------------------------------------------
+;; Случайный выбор поведения: walk, table, talk
+;;----------------------------------------------------------------------------
+to model-behavior-change
+  set action "walk"
+  
+  let t random-float 1 
+  if t < 0.25
+  [
+    set wish "wanna-walk"
+    choose-walking-direction
+  ]
+
+  if t >= 0.25 and t < 0.5
+  [
+    set wish "wanna-eat"
+  ]
+  
+  if t >= 0.5 and t < 0.75
+  [
+    set wish "wanna-listen"
+  ]
+  
+  if t >= 0.75 and t <= 1.0
+  [
+    set wish "wanna-talk"
+  ]
+  
+  color-turtle
+end
+
+;;----------------------------------------------------------------------------
+;; Обслуживание за столом
 ;;----------------------------------------------------------------------------
 to service-patron 
   if any? (turtles with [wish = "go-table"]) in-radius 2.5
@@ -196,22 +311,18 @@ to service-patron
     [
       set wish "walk"
       choose-walking-direction
-      
-      let init-direction -90 + random 180
-      set vx sin init-direction
-      set vy cos init-direction
       set drinks-had drinks-had + 1
-      set pushiness 1.5
-      
       color-turtle
     ]
   ]
 end
 
 ;;----------------------------------------------------------------------------
-;; color a turtle according to its pushiness
+;; Раскрашивание агента
 ;;----------------------------------------------------------------------------
 to color-turtle
+;  set color (scale-color white (count other turtles in-radius 2) 0 5)
+  
   ifelse (wish = "go-table")
   [ set color magenta ]
   [
@@ -224,6 +335,11 @@ to color-turtle
     ]
   ]
 end
+
+;;============================================================================
+;; Движение
+;; Movement
+;;============================================================================
 
 ;;----------------------------------------------------------------------------
 ;; helper function to find the magnitude of a vector
@@ -240,12 +356,6 @@ to-report field-of-view-modifier [desiredx desiredy forcex forcey]
   [ report 1 ] 
   [ report c]
 end
-
-
-;;============================================================================
-;; Движение
-;; Movement
-;;============================================================================
 
 ;;----------------------------------------------------------------------------
 ;; Social Force Model
@@ -326,24 +436,15 @@ end
 ;; find the driving force of the turtle
 ;;----------------------------------------------------------------------------
 to calc-driving-force
-  set driving-forcex (1 / tau) * (max-speed * (sin desired-direction) - vx) * pushiness
-  set driving-forcey (1 / tau) * (max-speed * (cos desired-direction) - vy) * pushiness
-end
-
-;;----------------------------------------------------------------------------
-;; find the heading towards the nearest goal
-;;----------------------------------------------------------------------------
-to calc-direction-to-table
-  let goal min-one-of (patches with [pcolor = green]) [ distance myself ]
-  face goal
-  set desired-direction towards goal
+  set driving-forcex (1 / tau) * (max-speed * (sin desired-direction) - vx) * 1.5 ;; 1.5 is pushiness
+  set driving-forcey (1 / tau) * (max-speed * (cos desired-direction) - vy) * 1.5
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-486
-15
-1159
-709
+438
+19
+1111
+713
 25
 25
 13.0
@@ -371,7 +472,7 @@ BUTTON
 19
 88
 53
-NIL
+Setup
 setup
 NIL
 1
@@ -388,7 +489,7 @@ BUTTON
 19
 179
 52
-NIL
+Go
 go
 T
 1
@@ -402,44 +503,29 @@ NIL
 
 SLIDER
 10
-76
+77
 182
-109
+110
 patrons
 patrons
 1
 200
-123
+144
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-249
-665
-421
-698
-lower-pushiness
-lower-pushiness
-0
 10
-1.5
-.1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-9
-183
-181
-216
+115
+182
+148
 field-of-view
 field-of-view
 0
 360
-200
+9
 1
 1
 NIL
@@ -447,9 +533,9 @@ HORIZONTAL
 
 SLIDER
 10
-219
+152
 182
-252
+185
 c
 c
 0
@@ -461,25 +547,25 @@ NIL
 HORIZONTAL
 
 SLIDER
-1241
-38
-1413
-71
+9
+329
+181
+362
 v0
 v0
 0
 10
-2
+2.7
 0.1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-1241
-78
-1413
-111
+9
+369
+181
+402
 sigma
 sigma
 0.1
@@ -491,20 +577,20 @@ NIL
 HORIZONTAL
 
 TEXTBOX
-1243
-13
-1393
-31
+11
+304
+161
+322
 Force Constants
 14
 0.0
 1
 
 SLIDER
-1241
-119
-1413
-152
+9
+410
+181
+443
 u0
 u0
 0
@@ -516,10 +602,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-1241
-161
-1413
-194
+9
+452
+181
+485
 r
 r
 0.1
@@ -531,10 +617,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-1241
-204
-1413
-237
+9
+495
+181
+528
 tau
 tau
 1
@@ -546,10 +632,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-9
-254
-181
-287
+10
+189
+182
+222
 max-speed
 max-speed
 0
@@ -560,79 +646,27 @@ max-speed
 NIL
 HORIZONTAL
 
-SWITCH
+SLIDER
 9
-290
-172
-323
-get-impatient?
-get-impatient?
-0
-1
--1000
-
-SWITCH
-10
-360
-171
-393
-get-belligerent?
-get-belligerent?
-1
-1
--1000
-
-SLIDER
-11
-325
-182
-358
-impatience-rate
-impatience-rate
-0
-.01
-0.0010
-.0005
-1
-NIL
-HORIZONTAL
-
-SLIDER
-11
-395
-183
-428
-belligerence-rate
-belligerence-rate
-0
-.1
-0.01
-.01
-1
-NIL
-HORIZONTAL
-
-SLIDER
-6
-432
-185
-465
+258
+180
+291
 mean-service-time
 mean-service-time
 0
 100
-3
+4
 1
 1
 ticks
 HORIZONTAL
 
 PLOT
-242
-17
-442
-167
-drinkshaddistribution
+194
+19
+424
+186
+Количество напитков выпито
 drinks had
 distribution
 0.0
@@ -644,6 +678,79 @@ false
 "" ""
 PENS
 "default" 1.0 1 -16777216 true "" "histogram [drinks-had] of turtles"
+
+TEXTBOX
+13
+233
+163
+251
+Обслуживание
+14
+0.0
+1
+
+PLOT
+194
+199
+424
+363
+Поведение
+Время
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"Walkers" 1.0 0 -5298144 true "" "plot count turtles with [wish = \"walk\"]"
+"Table" 1.0 0 -7858858 true "" "plot count turtles with [wish = \"go-table\"]"
+
+PLOT
+196
+387
+424
+555
+Плотность
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 1 -16777216 true "" "histogram [density] of patches"
+
+SWITCH
+11
+550
+179
+583
+show-density
+show-density
+1
+1
+-1000
+
+SLIDER
+109
+620
+281
+653
+talk-max-time-to-live
+talk-max-time-to-live
+0
+200
+50
+10
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1011,7 +1118,7 @@ Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 
 @#$#@#$#@
-NetLogo 5.0.2
+NetLogo 5.1.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@

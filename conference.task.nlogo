@@ -4,7 +4,7 @@
 turtles-own 
 [
   ;; INFECTION
-  infected
+  ;; Добавить свойство указывающее на зараженность
 
   ;; Жажда
   drinks-had        ;; the number of drinks i've had
@@ -86,8 +86,7 @@ to setup
     color-turtle
     
     ;; INFECTION
-    set infected false
-    
+    ;; Добавить инициализацию свойства зараженности
     
     let init-direction -90 + random 180 
     set vx sin init-direction
@@ -225,9 +224,16 @@ to go
     ]
     [
       ;; INFECTION
-      set infected infected or reduce or [infected] of out-link-neighbors
-      if infected [ ask out-link-neighbors [set infected true] ]
+      ;; Смоделировать перенос зараженности через говорящего:
+      ;; Если сам говорящий или хотя бы один из слушателей заражен, то передаем заразу всем
+      ;; Для этого могут быть использованы следующие команды:
+      ;; out-link-neighbors -> запрос множества агентов с которыми есть исходящая связь (слушатели)
+      ;; [<имя переменной>] of <список агентов> -> формирует список из значений определенного поля для разных агентов, аналогично Select в C# Linq
+      ;; reduce <операция> [<список>] -> выполняет агрегацию, например reduce + [1 2 0] даст 3
+      ;; if <bool> [<выполнение кода>]
+      ;; ask <множество агентов> [<выполнение кода в контексте агента>]
       
+     
       set time-left-in-talk time-left-in-talk - 1
     ]
   ]
@@ -337,25 +343,23 @@ end
 ;; Раскрашивание агента
 ;;----------------------------------------------------------------------------
 to color-turtle
-; pressure
-;  set color (scale-color white (count other turtles in-radius 2) 0 5)
+  ;; INFECTION
+  ;; Заменить код раскрашивания агента в зависимости от его зараженности
+  ;; Данная функция выполняется в контексте агента
+  ;; Операции, которые могут пригодиться:
+  ;; ifelse (<bool>) [<код>] [<код>]
   
-; INFECTION
-  ifelse (infected = true)
-  [ set color red ]
-  [ set color green ]
-  
-;  ifelse (wish = "wanna-eat")
-;  [ set color magenta ]
-;  [
-;    ifelse (wish = "wanna-walk")
-;    [ set color red ]
-;    [  
-;      ifelse (wish = "wanna-talk")
-;      [ set color yellow ]
-;      [ set color turquoise ]
-;    ]
-;  ]
+  ifelse (wish = "wanna-eat")
+  [ set color magenta ]
+  [
+    ifelse (wish = "wanna-walk")
+    [ set color red ]
+    [  
+      ifelse (wish = "wanna-talk")
+      [ set color yellow ]
+      [ set color turquoise ]
+    ]
+  ]
 end
 
 ;;============================================================================
@@ -761,21 +765,6 @@ show-density
 1
 -1000
 
-SLIDER
-109
-620
-281
-653
-talk-max-time-to-live
-talk-max-time-to-live
-0
-200
-50
-10
-1
-NIL
-HORIZONTAL
-
 @#$#@#$#@
 ## WHAT IS IT?
 
@@ -1142,7 +1131,7 @@ Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 
 @#$#@#$#@
-NetLogo 5.0.2
+NetLogo 5.1.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@

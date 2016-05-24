@@ -3,7 +3,7 @@ This model is intended to simulate the coffee-brake and a socialization part of 
 
 Agent's behavior consists of wishes and current actions. Agent may 'walk', 'talk', 'listen'. Intentions are presented by 'wanna-walk', 'wanna-eat', 'wanna-talk' and 'wanna-listen' wishes. Wishes define goals of an agent. When a goal is reached an agent randomly chooses another wish (each behavior type has a corresponding probability).
 
-As for the low-level movement model, the model incorporates the Social Forces Model (by Dirk Helbing, http://pre.aps.org/abstract/PRE/v51/i5/p42821), which is used in order to provide collision avoidance. The implementation of the SFM was taken from the "Waiting Bar Customers" model http://modelingcommons.org/browse/onemodel/3645.
+As for the low-level movement model, the model incorporates the Social Forces Model (Helbing, D., & Molnar, P. (1995). Social force model for pedestrian dynamics. Physical review E, 51(5), 4282; http://arxiv.org/pdf/cond-mat/9805244.pdf), which is used in order to provide collision avoidance. The implementation of the SFM was taken from the "Waiting Bar Customers" model http://modelingcommons.org/browse/onemodel/3645.
 
 Conversations are set by temporary links between talker and listeners.
 As an addon, the model of infection propagation is implemented.
